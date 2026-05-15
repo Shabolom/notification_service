@@ -4,7 +4,7 @@ import (
 	"time"
 )
 
-func (s *Service) RateLimiter() {
+func (s *Service) rateLimiter() {
 	ticker := time.NewTicker(time.Second / RATE)
 	defer ticker.Stop()
 

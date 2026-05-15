@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"notification_service/internal/config"
 	kafkaProducer "notification_service/internal/kafka-producer"
+	"sync"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/resend/resend-go/v2"
 	"go.uber.org/zap"
@@ -20,14 +20,17 @@ type DI struct {
 
 	notificator *resend.Client
 
-	ctx           context.Context
-	pgConn        *pgxpool.Pool
+	ctx context.Context
+	wg  *sync.WaitGroup
+
 	kafkaProducer *kafkaProducer.Kafka
 }
 
 func New(ctx context.Context) *DI {
+	wg := &sync.WaitGroup{}
 	return &DI{
 		ctx: ctx,
+		wg:  wg,
 	}
 }
 
@@ -72,4 +75,26 @@ func (d *DI) Logger() *zap.Logger {
 	_ = zap.ReplaceGlobals(logger)
 
 	return d.logger
+}
+
+func (d *DI) ShotDown() {
+	log := d.Logger()
+	d.wg.Wait()
+
+	if d.rabbitMQConn != nil {
+		if err := d.rabbitMQConn.Close(); err != nil {
+			log.Error("failed to close RabbitMQ connection", zap.Error(err))
+		} else {
+			log.Info("RabbitMQ connection was shut down")
+		}
+	}
+
+	if d.kafkaProducer != nil {
+		d.kafkaProducer.Close()
+		log.Info("Kafka producer was shut down")
+	}
+
+	if d.logger != nil {
+		_ = d.logger.Sync()
+	}
 }

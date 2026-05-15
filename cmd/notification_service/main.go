@@ -3,11 +3,12 @@ package main
 import (
 	"context"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"notification_service/internal/di"
 
 	"github.com/joho/godotenv"
-	"github.com/labstack/echo/v4"
 )
 
 func main() {
@@ -17,16 +18,20 @@ func main() {
 		panic(err)
 	}
 
-	e := echo.New()
-
 	container := di.New(ctx)
 	container.Logger()
 
-	// TODO: register routes here
-	// handlers := container.GetHTTPHandlers()
-	// _ = handlers
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
-	if err := e.Start(":" + os.Getenv("APP_PORT")); err != nil {
-		panic(err)
-	}
+	container.GetEventService().Exec()
+	container.Logger().Info("Exec started")
+
+	<-stop
+	
+	container.Logger().Info("Shutting down...")
+
+	container.ShotDown()
+
+	container.Logger().Info("Shut down complete")
 }

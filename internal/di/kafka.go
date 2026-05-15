@@ -6,5 +6,5 @@ func (d *DI) GetKafkaProducer() *kafkaProducer.Kafka {
 	if d.kafkaProducer != nil {
 		return d.kafkaProducer
 	}
-	return kafkaProducer.NewKafka(d.NewProducer(), d.NewKafkaJSONSerializer())
+	return kafkaProducer.NewKafka(d.NewProducer(), d.NewKafkaJSONSerializer(), d.Config().Kafka.Topic)
 }

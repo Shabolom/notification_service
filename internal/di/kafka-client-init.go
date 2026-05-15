@@ -1,26 +1,47 @@
 package di
 
 import (
-	"time"
+	"strings"
 
-	"github.com/segmentio/kafka-go"
-
+	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/confluentinc/confluent-kafka-go/v2/schemaregistry"
 	"github.com/confluentinc/confluent-kafka-go/v2/schemaregistry/serde"
 	"github.com/confluentinc/confluent-kafka-go/v2/schemaregistry/serde/jsonschema"
 )
 
-func (d *DI) NewProducer() *kafka.Writer {
+func (d *DI) NewProducer() *kafka.Producer {
+	producer, err := kafka.NewProducer(&kafka.ConfigMap{
+		"bootstrap.servers": strings.Join(d.Config().Kafka.Brokers, ","),
 
-	producer := &kafka.Writer{
-		Addr:                   kafka.TCP(d.Config().Kafka.Brokers...),
-		Topic:                  d.Config().Kafka.Topic,
-		Balancer:               &kafka.LeastBytes{},
-		AllowAutoTopicCreation: true,
-		WriteTimeout:           10 * time.Second,
-		ReadTimeout:            10 * time.Second,
-		RequiredAcks:           kafka.RequireOne,
+		// Аналог RequiredAcks: kafka.RequireOne
+		"acks": "1",
+
+		// Аналог таймаутов
+		"message.timeout.ms": 10000,
+		"socket.timeout.ms":  10000,
+
+		// Аналог automatic topic creation
+		"allow.auto.create.topics": true,
+
+		// Аналог LeastBytes прямого нет.
+		// В confluent producer partitioning работает иначе.
+		"partitioner": "murmur2_random",
+	})
+
+	if err != nil {
+		panic(err)
 	}
+
+	go func() {
+		for event := range producer.Events() {
+			switch e := event.(type) {
+			case *kafka.Message:
+				if e.TopicPartition.Error != nil {
+					d.Logger().Error(e.TopicPartition.Error.Error())
+				}
+			}
+		}
+	}()
 
 	return producer
 }

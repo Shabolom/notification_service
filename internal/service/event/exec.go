@@ -12,7 +12,7 @@ func (s *Service) Exec() {
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
-		s.RateLimiter()
+		s.rateLimiter()
 	}()
 
 	s.loginWorkersStart(loginConsumer)

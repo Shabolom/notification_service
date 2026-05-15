@@ -4,21 +4,27 @@ import (
 	"context"
 	"notification_service/internal/dto"
 
-	"github.com/segmentio/kafka-go"
+	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 )
 
 func (k *Kafka) WriteEvent(ctx context.Context, event *dto.Event) error {
 	payload, err := k.serializer.Serialize(
-		k.producer.Topic,
-		&event,
+		k.topic,
+		event,
 	)
 	if err != nil {
 		return err
 	}
 
-	err = k.producer.WriteMessages(ctx, kafka.Message{
+	kafkaMessage := &kafka.Message{
+		TopicPartition: kafka.TopicPartition{
+			Topic:     &k.topic,
+			Partition: kafka.PartitionAny,
+		},
 		Value: payload,
-	})
+	}
+
+	err = k.producer.Produce(kafkaMessage, nil)
 	if err != nil {
 		return err
 	}

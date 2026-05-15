@@ -1,14 +1,9 @@
 package di
 
 import (
-	"context"
 	"notification_service/internal/service/event"
 )
 
-type ExampleService interface {
-	Health(ctx context.Context) error
-}
-
-func (d *DI) GetEventService() ExampleService {
-	return event.New()
+func (d *DI) GetEventService() *event.Service {
+	return event.New(d.wg, d.Logger(), d.ctx, d.GetKafkaProducer(), d.GetNotificator(), d.GetRabbitMQConsumer())
 }
