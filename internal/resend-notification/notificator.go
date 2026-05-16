@@ -11,7 +11,7 @@ func (r *ResendNotification) WriteNotificationRegister(email string, action stri
 	params := &resend.SendEmailRequest{
 		From:    "onboarding@resend.dev",
 		To:      []string{email},
-		Subject: "Register",
+		Subject: action,
 		Html: `
 		<h2>Welcome!</h2>
 
@@ -45,7 +45,7 @@ func (r *ResendNotification) WriteNotificationLogin(email string, action string)
 	params := &resend.SendEmailRequest{
 		From:    "onboarding@resend.dev",
 		To:      []string{email},
-		Subject: "Login",
+		Subject: action,
 		Html: `
 		<h2>Login Successful</h2>
 

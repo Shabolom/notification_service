@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,7 +12,6 @@ import (
 )
 
 func main() {
-	fmt.Println("start")
 	ctx, cancel := context.WithCancel(context.Background())
 
 	if err := godotenv.Load("./build/local/.env"); err != nil {
