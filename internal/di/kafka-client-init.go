@@ -7,6 +7,7 @@ import (
 	"github.com/confluentinc/confluent-kafka-go/v2/schemaregistry"
 	"github.com/confluentinc/confluent-kafka-go/v2/schemaregistry/serde"
 	"github.com/confluentinc/confluent-kafka-go/v2/schemaregistry/serde/jsonschema"
+	"go.uber.org/zap"
 )
 
 func (d *DI) NewProducer() *kafka.Producer {
@@ -35,10 +36,34 @@ func (d *DI) NewProducer() *kafka.Producer {
 	go func() {
 		for event := range producer.Events() {
 			switch e := event.(type) {
+
 			case *kafka.Message:
-				if e.TopicPartition.Error != nil {
-					d.Logger().Error(e.TopicPartition.Error.Error())
+				topic := ""
+				if e.TopicPartition.Topic != nil {
+					topic = *e.TopicPartition.Topic
 				}
+
+				if e.TopicPartition.Error != nil {
+					d.logger.Error(
+						"delivery failed",
+						zap.String("topic", topic),
+						zap.Int32("partition", e.TopicPartition.Partition),
+						zap.Error(e.TopicPartition.Error),
+					)
+				} else {
+					d.logger.Info(
+						"message delivered",
+						zap.String("topic", topic),
+						zap.Int32("partition", e.TopicPartition.Partition),
+						zap.Int64("offset", int64(e.TopicPartition.Offset)),
+					)
+				}
+
+			case kafka.Error:
+				d.logger.Error(
+					"kafka client error",
+					zap.Error(e),
+				)
 			}
 		}
 	}()

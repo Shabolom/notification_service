@@ -1,7 +1,6 @@
 package event
 
 import (
-	"context"
 	"notification_service/internal/dto"
 	"time"
 
@@ -52,22 +51,20 @@ func (s *Service) handleLoginMessage(msg amqp.Delivery) {
 		Type:  "login",
 	}
 
-	if err := s.notificator.WriteNotification(event.Email); err != nil {
-		s.logger.Warn("failed to send email", zap.Error(err))
-		_ = msg.Nack(false, true)
+	if err := s.notificator.WriteNotificationLogin(event.Email, "login"); err != nil {
+		s.logger.Fatal("failed to send email", zap.Error(err))
+		_ = msg.Nack(false, false)
 		return
 	}
 
-	msgCtx, cancel := context.WithTimeout(s.ctx, time.Second*3)
-	defer cancel()
-
-	if err := s.kafkaProducer.WriteEvent(msgCtx, event); err != nil {
-		s.logger.Warn("failed to send a login event to kafka", zap.Any("event", event), zap.Error(err))
-		_ = msg.Nack(false, true)
+	if err := s.kafkaProducer.WriteEvent(event); err != nil {
+		s.logger.Fatal("failed to send a login event to kafka", zap.Any("event", event), zap.Error(err))
+		_ = msg.Nack(false, false)
 		return
 	}
 
-	if err := msg.Ack(false); err != nil {
+	err := msg.Ack(false)
+	if err != nil {
 		s.logger.Warn("failed to ack the message", zap.Error(err))
 	}
 }

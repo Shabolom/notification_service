@@ -1,13 +1,12 @@
 package kafkaProducer
 
 import (
-	"context"
 	"notification_service/internal/dto"
 
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 )
 
-func (k *Kafka) WriteEvent(ctx context.Context, event *dto.Event) error {
+func (k *Kafka) WriteEvent(event *dto.Event) error {
 	payload, err := k.serializer.Serialize(
 		k.topic,
 		event,

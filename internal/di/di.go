@@ -96,5 +96,6 @@ func (d *DI) ShotDown() {
 
 	if d.logger != nil {
 		_ = d.logger.Sync()
+		d.logger.Info("logger was shut down")
 	}
 }

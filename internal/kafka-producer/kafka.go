@@ -15,5 +15,6 @@ func NewKafka(producer *kafka.Producer, serializer *jsonschema.Serializer, topic
 	return &Kafka{
 		producer:   producer,
 		serializer: serializer,
+		topic:      topic,
 	}
 }

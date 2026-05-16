@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,7 +13,8 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
+	fmt.Println("start")
+	ctx, cancel := context.WithCancel(context.Background())
 
 	if err := godotenv.Load("./build/local/.env"); err != nil {
 		panic(err)
@@ -28,7 +30,8 @@ func main() {
 	container.Logger().Info("Exec started")
 
 	<-stop
-	
+	cancel()
+
 	container.Logger().Info("Shutting down...")
 
 	container.ShotDown()

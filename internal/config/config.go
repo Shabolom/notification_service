@@ -24,7 +24,7 @@ type KafkaSerialize struct {
 type Kafka struct {
 	Brokers []string `envconfig:"KAFKA_BROKERS"`
 	Topic   string   `envconfig:"KAFKA_TOPIC"`
-	GroupID string   `envconfig:"KAFKA_CONSUMER_GROUP"`
+	GroupID string   `envconfig:"KAFKA_GROUP_ID"`
 }
 
 type RabbitMQConfig struct {

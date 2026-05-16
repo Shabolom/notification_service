@@ -12,7 +12,7 @@ func (d *DI) GetRmq() *amqp.Connection {
 
 	conn, err := amqp.Dial(d.Config().RabbitMQDSN())
 	if err != nil {
-		d.logger.Fatal("Failed to connect to RabbitMQ", zap.Error(err))
+		d.logger.Info("Failed to connect to RabbitMQ", zap.Error(err))
 		return nil
 	}
 

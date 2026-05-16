@@ -10,11 +10,12 @@ import (
 )
 
 type Notificator interface {
-	WriteNotification(email string) error
+	WriteNotificationRegister(email string, action string) error
+	WriteNotificationLogin(email string, action string) error
 }
 
 type KafkaProducer interface {
-	WriteEvent(ctx context.Context, event *dto.Event) error
+	WriteEvent(event *dto.Event) error
 }
 
 type Rabbit interface {
