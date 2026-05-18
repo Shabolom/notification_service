@@ -43,18 +43,18 @@ func (s *Service) registerWorkers(ch <-chan amqp.Delivery) {
 				return
 			}
 
-			s.handleRegisterMessage(msg)
+			s.handleRegisterMessage(&msg)
 		}
 	}
 }
 
-func (s *Service) handleRegisterMessage(msg amqp.Delivery) {
+func (s *Service) handleRegisterMessage(msg *amqp.Delivery) {
 	if msg.ContentType != amqp.MimeTextPlain {
 		s.logger.Info("msg ContentType is not TEXTTYPE", zap.Any("message id", msg.MessageId))
 
 		err := s.rabbit.PublishToDLQ(msg, RegisterQueueDLQKey)
 		if err != nil {
-			s.logger.Info(
+			s.logger.Warn(
 				"msg ContentType is not TEXTTYPE",
 				zap.String("message_id", msg.MessageId),
 				zap.String("content_type", msg.ContentType),
@@ -81,7 +81,7 @@ func (s *Service) handleRegisterMessage(msg amqp.Delivery) {
 
 		var kafkaErr kafka.Error
 		if errors.As(err, &kafkaErr) && kafkaErr.IsRetriable() {
-			if utils.WasRetried(msg, RegisterQueueRetryName) {
+			if utils.ReachedRetryLimit(msg, RegisterQueueRetryName, 5) {
 				err := s.rabbit.PublishToDLQ(msg, RegisterQueueDLQKey)
 				if err != nil {
 					s.logger.Warn("failed to publish msg to DLQ", zap.Error(err))
@@ -108,7 +108,7 @@ func (s *Service) handleRegisterMessage(msg amqp.Delivery) {
 		return
 	}
 
-	if !utils.WasRetried(msg, RegisterQueueRetryName) {
+	if !utils.ReachedRetryLimit(msg, RegisterQueueRetryName, 5) {
 		if err := s.notificator.WriteNotificationRegister(event.Email, "register"); err != nil {
 			s.logger.Warn("failed to send email", zap.Error(err))
 			_ = msg.Nack(false, true)

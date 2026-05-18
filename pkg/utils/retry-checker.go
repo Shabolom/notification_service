@@ -2,8 +2,20 @@ package utils
 
 import amqp "github.com/rabbitmq/amqp091-go"
 
-func WasRetried(msg amqp.Delivery, retryQueue string) bool {
+func ReachedRetryLimit(msg *amqp.Delivery, retryQueue string, retryCount int64) bool {
 	raw, ok := msg.Headers["x-death"]
+	// пример что содержит в себе ключ
+	//x-death:
+	//[
+	//  {
+	//    count: 3,
+	//    exchange: "auth.retry.exchange",
+	//    queue: "auth.register.retry",
+	//    reason: "expired",
+	//    routing-keys: ["register.retry"],
+	//    time: ...
+	//  }
+	//]
 	if !ok {
 		return false
 	}
@@ -24,7 +36,17 @@ func WasRetried(msg amqp.Delivery, retryQueue string) bool {
 			continue
 		}
 
-		if queue == retryQueue {
+		reason, ok := deathMap["reason"].(string)
+		if !ok {
+			continue
+		}
+
+		count, ok := deathMap["count"].(int64)
+		if !ok {
+			continue
+		}
+
+		if queue == retryQueue && reason == "expired" && count >= retryCount {
 			return true
 		}
 	}

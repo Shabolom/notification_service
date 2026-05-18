@@ -19,7 +19,7 @@ type KafkaProducer interface {
 }
 
 type Rabbit interface {
-	PublishToDLQ(msg amqp.Delivery, routingKey string) error
+	PublishToDLQ(msg *amqp.Delivery, routingKey string) error
 	GettingConsumers() (error error, loginConsumer <-chan amqp.Delivery, registerConsumer <-chan amqp.Delivery)
 }
 type Service struct {

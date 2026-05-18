@@ -2,7 +2,7 @@ package utils
 
 import amqp "github.com/rabbitmq/amqp091-go"
 
-func RetryCount(msg amqp.Delivery, queueName string) int64 {
+func RetryCount(msg *amqp.Delivery, queueName string) int64 {
 	raw, ok := msg.Headers["x-death"]
 	if !ok {
 		return 0

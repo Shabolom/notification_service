@@ -80,8 +80,6 @@ func (r *Rabbit) CanalInit() (*amqp.Channel, error) {
 		false,
 		false,
 		amqp.Table{
-			"x-queue-type":              "quorum",
-			"x-delivery-limit":          5,
 			"x-dead-letter-exchange":    "auth.events.dlx",
 			"x-dead-letter-routing-key": "register.retry",
 		},
@@ -99,8 +97,6 @@ func (r *Rabbit) CanalInit() (*amqp.Channel, error) {
 		false,
 		false,
 		amqp.Table{
-			"x-queue-type":              "quorum",
-			"x-delivery-limit":          5,
 			"x-dead-letter-exchange":    "auth.events.dlx",
 			"x-dead-letter-routing-key": "login.logs.retry",
 		},
@@ -118,7 +114,7 @@ func (r *Rabbit) CanalInit() (*amqp.Channel, error) {
 		false,
 		false,
 		amqp.Table{
-			"x-message-ttl":             int32(600000),
+			"x-message-ttl":             int32(1000),
 			"x-dead-letter-exchange":    "auth.events",
 			"x-dead-letter-routing-key": "register",
 		},
@@ -136,7 +132,7 @@ func (r *Rabbit) CanalInit() (*amqp.Channel, error) {
 		false,
 		false,
 		amqp.Table{
-			"x-message-ttl":             int32(600000),
+			"x-message-ttl":             int32(1000),
 			"x-dead-letter-exchange":    "auth.events",
 			"x-dead-letter-routing-key": "login",
 		},
