@@ -84,7 +84,7 @@ func (s *Service) handleLoginMessage(msg *amqp.Delivery) {
 				return
 			}
 
-			_ = msg.Nack(false, true)
+			_ = msg.Nack(false, false)
 			return
 		}
 
@@ -99,12 +99,22 @@ func (s *Service) handleLoginMessage(msg *amqp.Delivery) {
 		return
 	}
 
-	if !utils.ReachedRetryLimit(msg, LoginQueueRetryName, 5) {
-		if err := s.notificator.WriteNotificationRegister(event.Email, "register"); err != nil {
-			s.logger.Warn("failed to send email", zap.Error(err))
+	if utils.ReachedRetryLimit(msg, LoginQueueRetryName, 5) {
+		err := s.rabbit.PublishToDLQ(msg, LoginQueueDLQKey)
+		if err != nil {
+			s.logger.Warn("failed to publish msg to DLQ", zap.Error(err))
 			_ = msg.Nack(false, true)
 			return
 		}
+
+		_ = msg.Ack(false)
+		return
+	}
+
+	if err = s.notificator.WriteNotificationLogin(event.Email, "login"); err != nil {
+		s.logger.Warn("failed to send email", zap.Error(err))
+		_ = msg.Nack(false, false)
+		return
 	}
 
 	_ = msg.Ack(false)

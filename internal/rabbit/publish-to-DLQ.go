@@ -1,6 +1,8 @@
 package rabbit
 
-import amqp "github.com/rabbitmq/amqp091-go"
+import (
+	amqp "github.com/rabbitmq/amqp091-go"
+)
 
 func (r *Rabbit) PublishToDLQ(msg *amqp.Delivery, routingKey string) error {
 	return r.ch.Publish(

@@ -1,6 +1,8 @@
 package utils
 
-import amqp "github.com/rabbitmq/amqp091-go"
+import (
+	amqp "github.com/rabbitmq/amqp091-go"
+)
 
 func ReachedRetryLimit(msg *amqp.Delivery, retryQueue string, retryCount int64) bool {
 	raw, ok := msg.Headers["x-death"]

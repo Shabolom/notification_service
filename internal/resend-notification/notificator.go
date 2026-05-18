@@ -1,7 +1,6 @@
 package resendNotification
 
 import (
-	"fmt"
 	"log"
 
 	"github.com/resend/resend-go/v2"
@@ -33,7 +32,6 @@ func (r *ResendNotification) WriteNotificationRegister(email string, action stri
 
 	sent, err := r.client.Emails.Send(params)
 	if err != nil {
-		fmt.Println(email, action, err, 123123123)
 		return err
 	}
 
@@ -67,7 +65,6 @@ func (r *ResendNotification) WriteNotificationLogin(email string, action string)
 
 	sent, err := r.client.Emails.Send(params)
 	if err != nil {
-		fmt.Println(email, action, err, 123123123)
 		return err
 	}
 
