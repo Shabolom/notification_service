@@ -23,9 +23,18 @@ func (k *Kafka) WriteEvent(event *dto.Event) error {
 		Value: payload,
 	}
 
-	err = k.producer.Produce(kafkaMessage, nil)
+	deliveryChan := make(chan kafka.Event, 1)
+
+	err = k.producer.Produce(kafkaMessage, deliveryChan)
 	if err != nil {
 		return err
+	}
+
+	e := <-deliveryChan
+
+	msg := e.(*kafka.Message)
+	if msg.TopicPartition.Error != nil {
+		return msg.TopicPartition.Error
 	}
 
 	return nil

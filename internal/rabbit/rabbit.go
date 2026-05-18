@@ -11,6 +11,7 @@ type Rabbit struct {
 	conn   *amqp.Connection
 	logger *zap.Logger
 	ctx    context.Context
+	ch     *amqp.Channel
 }
 
 func New(ctx context.Context, conn *amqp.Connection, logger *zap.Logger) *Rabbit {

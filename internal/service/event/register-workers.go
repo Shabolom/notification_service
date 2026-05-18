@@ -1,11 +1,23 @@
 package event
 
 import (
+	"errors"
 	"notification_service/internal/dto"
+	"notification_service/pkg/utils"
 	"time"
 
+	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
+)
+
+const (
+	LoginQueueName         = "auth.login.logs"
+	RegisterQueueName      = "auth.register"
+	LoginQueueRetryName    = "auth.login.logs.retry"
+	RegisterQueueRetryName = "auth.register.retry"
+	LoginQueueDLQKey       = "login.logs.dlq"
+	RegisterQueueDLQKey    = "register.dlq"
 )
 
 func (s *Service) registerWorkersStart(ch <-chan amqp.Delivery) {
@@ -39,7 +51,19 @@ func (s *Service) registerWorkers(ch <-chan amqp.Delivery) {
 func (s *Service) handleRegisterMessage(msg amqp.Delivery) {
 	if msg.ContentType != amqp.MimeTextPlain {
 		s.logger.Info("msg ContentType is not TEXTTYPE", zap.Any("message id", msg.MessageId))
-		_ = msg.Nack(false, false)
+
+		err := s.rabbit.PublishToDLQ(msg, RegisterQueueDLQKey)
+		if err != nil {
+			s.logger.Info(
+				"msg ContentType is not TEXTTYPE",
+				zap.String("message_id", msg.MessageId),
+				zap.String("content_type", msg.ContentType),
+			)
+			_ = msg.Nack(false, true)
+			return
+		}
+
+		_ = msg.Ack(false)
 		return
 	}
 
@@ -51,20 +75,46 @@ func (s *Service) handleRegisterMessage(msg amqp.Delivery) {
 		Type:  "register",
 	}
 
-	if err := s.notificator.WriteNotificationRegister(event.Email, "register"); err != nil {
-		s.logger.Warn("failed to send email", zap.Error(err))
-		_ = msg.Nack(false, true)
-		return
-	}
-
-	if err := s.kafkaProducer.WriteEvent(event); err != nil {
-		s.logger.Warn("failed to send a login event to kafka", zap.Any("event", event), zap.Error(err))
-		_ = msg.Nack(false, true)
-		return
-	}
-
-	err := msg.Ack(false)
+	err := s.kafkaProducer.WriteEvent(event)
 	if err != nil {
-		s.logger.Warn("failed to ack the message", zap.Error(err))
+		s.logger.Error("failed to send event to kafka", zap.Error(err))
+
+		var kafkaErr kafka.Error
+		if errors.As(err, &kafkaErr) && kafkaErr.IsRetriable() {
+			if utils.WasRetried(msg, RegisterQueueRetryName) {
+				err := s.rabbit.PublishToDLQ(msg, RegisterQueueDLQKey)
+				if err != nil {
+					s.logger.Warn("failed to publish msg to DLQ", zap.Error(err))
+					_ = msg.Nack(false, true)
+					return
+				}
+
+				_ = msg.Ack(false)
+				return
+			}
+
+			_ = msg.Nack(false, true)
+			return
+		}
+
+		err := s.rabbit.PublishToDLQ(msg, RegisterQueueDLQKey)
+		if err != nil {
+			s.logger.Warn("failed to publish msg to DLQ", zap.Error(err))
+			_ = msg.Nack(false, true)
+			return
+		}
+
+		_ = msg.Ack(false)
+		return
 	}
+
+	if !utils.WasRetried(msg, RegisterQueueRetryName) {
+		if err := s.notificator.WriteNotificationRegister(event.Email, "register"); err != nil {
+			s.logger.Warn("failed to send email", zap.Error(err))
+			_ = msg.Nack(false, true)
+			return
+		}
+	}
+
+	_ = msg.Ack(false)
 }
