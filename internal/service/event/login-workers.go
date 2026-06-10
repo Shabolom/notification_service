@@ -1,6 +1,7 @@
 package event
 
 import (
+	"context"
 	"errors"
 	"notification_service/internal/dto"
 	"notification_service/pkg/utils"
@@ -40,16 +41,28 @@ func (s *Service) loginWorkers(ch <-chan amqp.Delivery) {
 }
 
 func (s *Service) handleLoginMessage(msg *amqp.Delivery) {
-	if msg.ContentType != amqp.MimeTextPlain {
-		s.logger.Info("msg ContentType is not TEXTTYPE", zap.Any("message id", msg.MessageId))
+	publishToDLQ := func() error {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
 
-		err := s.rabbit.PublishToDLQ(msg, LoginQueueDLQKey)
-		if err != nil {
+		return s.rabbit.PublishToDLQ(ctx, msg, LoginQueueDLQKey)
+	}
+
+	if msg.ContentType != amqp.MimeTextPlain {
+		s.logger.Warn(
+			"invalid message content type",
+			zap.String("message_id", msg.MessageId),
+			zap.String("content_type", msg.ContentType),
+		)
+
+		if err := publishToDLQ(); err != nil {
 			s.logger.Warn(
-				"msg ContentType is not TEXTTYPE",
+				"failed to publish invalid content type message to DLQ",
 				zap.String("message_id", msg.MessageId),
 				zap.String("content_type", msg.ContentType),
+				zap.Error(err),
 			)
+
 			_ = msg.Nack(false, true)
 			return
 		}
@@ -58,12 +71,17 @@ func (s *Service) handleLoginMessage(msg *amqp.Delivery) {
 		return
 	}
 
-	<-s.tokenChLimiter
+	select {
+	case <-s.ctx.Done():
+		_ = msg.Nack(false, true)
+		return
+	case <-s.tokenChLimiter:
+	}
 
 	event := &dto.Event{
 		Time:  time.Now(),
 		Email: string(msg.Body),
-		Type:  "register",
+		Type:  "login",
 	}
 
 	err := s.kafkaProducer.WriteEvent(event)
@@ -73,8 +91,7 @@ func (s *Service) handleLoginMessage(msg *amqp.Delivery) {
 		var kafkaErr kafka.Error
 		if errors.As(err, &kafkaErr) && kafkaErr.IsRetriable() {
 			if utils.ReachedRetryLimit(msg, LoginQueueRetryName, 5) {
-				err := s.rabbit.PublishToDLQ(msg, LoginQueueDLQKey)
-				if err != nil {
+				if err := publishToDLQ(); err != nil {
 					s.logger.Warn("failed to publish msg to DLQ", zap.Error(err))
 					_ = msg.Nack(false, true)
 					return
@@ -88,20 +105,7 @@ func (s *Service) handleLoginMessage(msg *amqp.Delivery) {
 			return
 		}
 
-		err := s.rabbit.PublishToDLQ(msg, LoginQueueDLQKey)
-		if err != nil {
-			s.logger.Warn("failed to publish msg to DLQ", zap.Error(err))
-			_ = msg.Nack(false, true)
-			return
-		}
-
-		_ = msg.Ack(false)
-		return
-	}
-
-	if utils.ReachedRetryLimit(msg, LoginQueueRetryName, 5) {
-		err := s.rabbit.PublishToDLQ(msg, LoginQueueDLQKey)
-		if err != nil {
+		if err := publishToDLQ(); err != nil {
 			s.logger.Warn("failed to publish msg to DLQ", zap.Error(err))
 			_ = msg.Nack(false, true)
 			return
@@ -112,7 +116,19 @@ func (s *Service) handleLoginMessage(msg *amqp.Delivery) {
 	}
 
 	if err = s.notificator.WriteNotificationLogin(event.Email, "login"); err != nil {
-		s.logger.Warn("failed to send email", zap.Error(err))
+		s.logger.Warn("failed to send login notification", zap.Error(err))
+
+		if utils.ReachedRetryLimit(msg, LoginQueueRetryName, 5) {
+			if err := publishToDLQ(); err != nil {
+				s.logger.Warn("failed to publish msg to DLQ", zap.Error(err))
+				_ = msg.Nack(false, true)
+				return
+			}
+
+			_ = msg.Ack(false)
+			return
+		}
+
 		_ = msg.Nack(false, false)
 		return
 	}

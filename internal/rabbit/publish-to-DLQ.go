@@ -1,11 +1,14 @@
 package rabbit
 
 import (
+	"context"
+
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-func (r *Rabbit) PublishToDLQ(msg *amqp.Delivery, routingKey string) error {
-	return r.ch.Publish(
+func (r *Rabbit) PublishToDLQ(ctx context.Context, msg *amqp.Delivery, routingKey string) error {
+	return r.ch.PublishWithContext(
+		ctx,
 		"auth.events.final.dlx",
 		routingKey,
 		false,
