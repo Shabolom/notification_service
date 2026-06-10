@@ -22,7 +22,7 @@ func (d *DI) NewProducer() *kafka.Producer {
 		"socket.timeout.ms":  10000,
 
 		// Аналог automatic topic creation
-		"allow.auto.create.topics": true,
+		"allow.auto.create.topics": false,
 
 		// Аналог LeastBytes прямого нет.
 		// В confluent producer partitioning работает иначе.

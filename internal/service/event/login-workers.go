@@ -1,9 +1,13 @@
 package event
 
 import (
+	"context"
+	"errors"
 	"notification_service/internal/dto"
+	"notification_service/pkg/utils"
 	"time"
 
+	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
 )
@@ -31,19 +35,48 @@ func (s *Service) loginWorkers(ch <-chan amqp.Delivery) {
 				return
 			}
 
-			s.handleLoginMessage(msg)
+			s.handleLoginMessage(&msg)
 		}
 	}
 }
 
-func (s *Service) handleLoginMessage(msg amqp.Delivery) {
+func (s *Service) handleLoginMessage(msg *amqp.Delivery) {
+	publishToDLQ := func() error {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+
+		return s.rabbit.PublishToDLQ(ctx, msg, LoginQueueDLQKey)
+	}
+
 	if msg.ContentType != amqp.MimeTextPlain {
-		s.logger.Info("msg ContentType is not TEXTTYPE", zap.Any("message id", msg.MessageId))
-		_ = msg.Nack(false, false)
+		s.logger.Warn(
+			"invalid message content type",
+			zap.String("message_id", msg.MessageId),
+			zap.String("content_type", msg.ContentType),
+		)
+
+		if err := publishToDLQ(); err != nil {
+			s.logger.Warn(
+				"failed to publish invalid content type message to DLQ",
+				zap.String("message_id", msg.MessageId),
+				zap.String("content_type", msg.ContentType),
+				zap.Error(err),
+			)
+
+			_ = msg.Nack(false, true)
+			return
+		}
+
+		_ = msg.Ack(false)
 		return
 	}
 
-	<-s.tokenChLimiter
+	select {
+	case <-s.ctx.Done():
+		_ = msg.Nack(false, true)
+		return
+	case <-s.tokenChLimiter:
+	}
 
 	event := &dto.Event{
 		Time:  time.Now(),
@@ -51,20 +84,54 @@ func (s *Service) handleLoginMessage(msg amqp.Delivery) {
 		Type:  "login",
 	}
 
-	if err := s.notificator.WriteNotificationLogin(event.Email, "login"); err != nil {
-		s.logger.Fatal("failed to send email", zap.Error(err))
-		_ = msg.Nack(false, false)
-		return
-	}
-
-	if err := s.kafkaProducer.WriteEvent(event); err != nil {
-		s.logger.Fatal("failed to send a login event to kafka", zap.Any("event", event), zap.Error(err))
-		_ = msg.Nack(false, false)
-		return
-	}
-
-	err := msg.Ack(false)
+	err := s.kafkaProducer.WriteEvent(event)
 	if err != nil {
-		s.logger.Warn("failed to ack the message", zap.Error(err))
+		s.logger.Error("failed to send event to kafka", zap.Error(err))
+
+		var kafkaErr kafka.Error
+		if errors.As(err, &kafkaErr) && kafkaErr.IsRetriable() {
+			if utils.ReachedRetryLimit(msg, LoginQueueRetryName, 5) {
+				if err := publishToDLQ(); err != nil {
+					s.logger.Warn("failed to publish msg to DLQ", zap.Error(err))
+					_ = msg.Nack(false, true)
+					return
+				}
+
+				_ = msg.Ack(false)
+				return
+			}
+
+			_ = msg.Nack(false, false)
+			return
+		}
+
+		if err := publishToDLQ(); err != nil {
+			s.logger.Warn("failed to publish msg to DLQ", zap.Error(err))
+			_ = msg.Nack(false, true)
+			return
+		}
+
+		_ = msg.Ack(false)
+		return
 	}
+
+	if err = s.notificator.WriteNotificationLogin(event.Email, "login"); err != nil {
+		s.logger.Warn("failed to send login notification", zap.Error(err))
+
+		if utils.ReachedRetryLimit(msg, LoginQueueRetryName, 5) {
+			if err := publishToDLQ(); err != nil {
+				s.logger.Warn("failed to publish msg to DLQ", zap.Error(err))
+				_ = msg.Nack(false, true)
+				return
+			}
+
+			_ = msg.Ack(false)
+			return
+		}
+
+		_ = msg.Nack(false, false)
+		return
+	}
+
+	_ = msg.Ack(false)
 }
